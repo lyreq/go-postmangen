@@ -31,8 +31,15 @@ func NewPostmanGen(name string, description string) *PostmanGen {
 	return p
 }
 
+func hasAnyRelevantTag(f reflect.StructField) bool {
+	return (f.Tag.Get("json") != "" && f.Tag.Get("json") != "-") ||
+		(f.Tag.Get("form") != "" && f.Tag.Get("form") != "-") ||
+		(f.Tag.Get("formFile") != "" && f.Tag.Get("formFile") != "-") ||
+		(f.Tag.Get("query") != "" && f.Tag.Get("query") != "-") ||
+		(f.Tag.Get("param") != "" && f.Tag.Get("param") != "-")
+}
+
 func walkStructFields(t reflect.Type, fn func(field reflect.StructField)) {
-	// ptr -> elem
 	if t.Kind() == reflect.Ptr {
 		t = t.Elem()
 	}
@@ -47,15 +54,19 @@ func walkStructFields(t reflect.Type, fn func(field reflect.StructField)) {
 			continue
 		}
 
-		if f.Anonymous {
-			ft := f.Type
-			if ft.Kind() == reflect.Ptr {
-				ft = ft.Elem()
-			}
-			if ft.Kind() == reflect.Struct {
-				walkStructFields(ft, fn)
-				continue
-			}
+		ft := f.Type
+		if ft.Kind() == reflect.Ptr {
+			ft = ft.Elem()
+		}
+
+		if f.Anonymous && ft.Kind() == reflect.Struct {
+			walkStructFields(ft, fn)
+			continue
+		}
+
+		if !f.Anonymous && ft.Kind() == reflect.Struct && !hasAnyRelevantTag(f) {
+			walkStructFields(ft, fn)
+			continue
 		}
 
 		fn(f)
