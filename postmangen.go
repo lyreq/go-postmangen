@@ -31,6 +31,37 @@ func NewPostmanGen(name string, description string) *PostmanGen {
 	return p
 }
 
+func walkStructFields(t reflect.Type, fn func(field reflect.StructField)) {
+	// ptr -> elem
+	if t.Kind() == reflect.Ptr {
+		t = t.Elem()
+	}
+	if t.Kind() != reflect.Struct {
+		return
+	}
+
+	for i := 0; i < t.NumField(); i++ {
+		f := t.Field(i)
+
+		if f.PkgPath != "" {
+			continue
+		}
+
+		if f.Anonymous {
+			ft := f.Type
+			if ft.Kind() == reflect.Ptr {
+				ft = ft.Elem()
+			}
+			if ft.Kind() == reflect.Struct {
+				walkStructFields(ft, fn)
+				continue
+			}
+		}
+
+		fn(f)
+	}
+}
+
 func (p *PostmanGen) AddVariable(key string, value string) *PostmanGen {
 	p.collection.Variables = append(p.collection.Variables, &postman.Variable{
 		Key:   key,
@@ -79,8 +110,7 @@ func (p *PostmanGen) Register(spec map[string]any) error {
 	queryParams := []*postman.QueryParam{}
 	pathVariables := []*postman.Variable{}
 
-	for i := 0; i < typ.NumField(); i++ {
-		field := typ.Field(i)
+	walkStructFields(typ, func(field reflect.StructField) {
 		fieldName := field.Name
 		jsonTag := field.Tag.Get("json")
 		formTag := field.Tag.Get("form")
@@ -171,7 +201,7 @@ func (p *PostmanGen) Register(spec map[string]any) error {
 				Type:  "string",
 			})
 		}
-	}
+	})
 
 	processedPath := path
 	pathSegments := strings.Split(strings.Trim(processedPath, "/"), "/")
